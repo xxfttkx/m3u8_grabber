@@ -17,7 +17,12 @@ app.get("/api/m3u8", (async (req: Request, res: Response) => {
 
   console.log(`🌐 正在抓取页面: ${pageUrl}`);
 
-  const browser = await puppeteer.launch({ headless: true });
+  const browser = await puppeteer.launch({
+    headless: true,
+    executablePath:
+      "/opt/render/.cache/puppeteer/chrome/linux-138.0.7204.49/chrome-linux64/chrome",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
   const page = await browser.newPage();
 
   const m3u8List: string[] = [];
