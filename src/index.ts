@@ -3,10 +3,12 @@ import express, { Request, Response } from "express";
 import puppeteer from "puppeteer";
 import { handleHanimeRed } from "./sites/hanimeRed";
 import { handleGeneric } from "./sites/generic";
+import cors from "cors";
 
 const app = express();
 const port = 3000;
 
+app.use(cors());
 app.get("/test", (_req: Request, res: Response) => {
   res.send("ok");
 });
@@ -20,6 +22,7 @@ app.get("/api/video", (async (req: Request, res: Response) => {
   console.log(`🌐 正在抓取页面: ${targetUrl}`);
 
   const isProduction = process.env.NODE_ENV === "production";
+  console.log(`🚀 当前环境: ${isProduction ? "生产环境" : "本地环境"}`);
 
   const browser = await puppeteer.launch({
     headless: isProduction, // 生产环境 true，本地 false

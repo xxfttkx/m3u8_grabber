@@ -1,7 +1,8 @@
 import { Page } from "puppeteer";
 
 export async function handleGeneric(page: Page, capturedVideoUrls: string[]) {
-  await page.evaluate(() => {
+  await page.evaluate(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
     const video = document.querySelector("video");
     if (video) {
       video.play().catch((err) => console.warn("🔈 自动播放失败:", err));
