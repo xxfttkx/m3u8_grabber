@@ -1,59 +1,81 @@
+// src/server.ts
 import express, { Request, Response } from "express";
 import puppeteer from "puppeteer";
+import { handleHanimeRed } from "./sites/hanimeRed";
+import { handleGeneric } from "./sites/generic";
 
 const app = express();
 const port = 3000;
 
-app.get("/test", (req: Request, res: Response) => {
+app.get("/test", (_req: Request, res: Response) => {
   res.send("ok");
 });
 
-app.get("/api/m3u8", (async (req: Request, res: Response) => {
-  const pageUrl = req.query.url as string;
-
-  if (!pageUrl) {
+app.get("/api/video", (async (req: Request, res: Response) => {
+  const targetUrl = req.query.url as string;
+  if (!targetUrl) {
     return res.status(400).json({ error: "Missing url parameter" });
   }
 
-  console.log(`🌐 正在抓取页面: ${pageUrl}`);
+  console.log(`🌐 正在抓取页面: ${targetUrl}`);
+
+  const isProduction = process.env.NODE_ENV === "production";
 
   const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    headless: isProduction, // 生产环境 true，本地 false
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      ...(isProduction ? [] : ["--proxy-server=http://127.0.0.1:10808"]),
+    ],
   });
   const page = await browser.newPage();
 
-  const m3u8List: string[] = [];
+  await page.setCacheEnabled(false);
+  await page.setUserAgent(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/114.0 Safari/537.36"
+  );
+  await page.setExtraHTTPHeaders({
+    "Accept-Language": "en-US,en;q=0.9",
+  });
 
-  // 监听所有网络请求
+  const capturedVideoUrls: string[] = [];
+
+  page.on("console", (msg) => {
+    console.log("🧭 浏览器内日志:", msg.text());
+  });
+
   page.on("requestfinished", async (request) => {
     const url = request.url();
     const response = await request.response();
     const headers = response?.headers() || {};
 
     if (
+      url.includes(".mp4") ||
       url.includes(".m3u8") ||
       headers["content-type"]?.includes("application/vnd.apple.mpegurl")
     ) {
-      if (!m3u8List.includes(url)) {
-        console.log("🎯 捕获到 m3u8:", url);
-        m3u8List.push(url);
+      if (!capturedVideoUrls.includes(url)) {
+        console.log("🎯 捕获到视频资源:", url);
+        capturedVideoUrls.push(url);
       }
     }
   });
 
   try {
-    await page.goto(pageUrl, { waitUntil: "networkidle2", timeout: 30000 });
-
-    // 等待几秒加载可能的播放请求
+    await page.goto(targetUrl, { waitUntil: "networkidle2", timeout: 30000 });
     await new Promise((resolve) => setTimeout(resolve, 5000));
-  } catch (err) {
-    console.error("❌ 页面加载失败:", err);
+    if (targetUrl.includes("hanime.red")) {
+      await handleHanimeRed(page, capturedVideoUrls);
+    } else {
+      await handleGeneric(page, capturedVideoUrls);
+    }
+  } catch (error) {
+    console.error("❌ 页面加载失败:", error);
   }
 
   await browser.close();
-
-  res.json({ m3u8: m3u8List });
+  res.json({ videos: capturedVideoUrls });
 }) as express.RequestHandler);
 
 app.listen(port, () => {
